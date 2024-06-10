@@ -71,7 +71,10 @@ static void MX_TIM3_Init(void);
 uint64_t RxpipeAddrs = 0x11223344AA;
 char myRxData[50];
 
-void Rotate_Left(void) {
+
+//Control de giro servomotor ------------------------------------------------
+
+void Rotate_Left() {
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, (63999 * 0.05));
 }
 
@@ -82,21 +85,32 @@ void Rotate_Center(void) {
 void Rotate_Right(void) {
 	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, (63999 * 0.1));
 }
+
+void rotate(uint32_t angle) {
+	double val = (angle + 45) * 0.05 / 90 + 0.05;
+	__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_4, (63999 * val));
+}
+
+//-----------------------------------------------------------------------------------
+
+//Control de potencia de traccion-----------------------------------------------------
+
 void Forward() {
 	double val = 0.5f;
 	uint32_t arg = 0;
 	HAL_Delay(2000);
 	while (val * 100 < 101) { //Target : 0.1
 		val = val + 0.01f;
-		//arg =  (63999 * 0.075) + (63999 * 0.025 * val);
+//		arg =  (63999 * 0.070) + (63999 * 0.03 * val);
 		arg = (63999 * 0.05) + (63999 * 0.05 * val);
 		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, arg);
 		HAL_Delay(100);
 	}
 }
+
 void Backward() {
 	double val = 0.5f;
-	uint32_t arg;
+	uint32_t arg = 0;
 	HAL_Delay(2000);
 	while (val * 100 < 101) { //Target : 0.05
 		val = val + 0.01f;
@@ -105,6 +119,20 @@ void Backward() {
 		HAL_Delay(100);
 	}
 }
+void backward() {
+	double val = 0.5f;
+	uint32_t arg = 0;
+	HAL_Delay(2000);
+	while (val * 100 < 101) { //Target : 0.05
+		val = val + 0.01f;
+		arg = (63999 * 0.075) - (63999 * 0.025 * val);
+		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, arg);
+		HAL_Delay(100);
+	}
+}
+
+
+//----------------------------------------------------------------------------------------
 
 void processCharacters(char *data) {
 	int i = 0;
@@ -122,10 +150,10 @@ void processCharacters(char *data) {
 			Rotate_Center();
 			break;
 		case 'f':
-			Forward();
+			Forward(100);
 			break;
 		case 'b':
-			Backward();
+			Backward(100);
 			break;
 		default:
 			// Opcional: Manejar caracteres no esperados o simplemente no hacer nada
@@ -198,8 +226,9 @@ int main(void)
   MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 	//NO ACK
-	NRF24_begin(GPIOB, GPIO_PIN_8, GPIO_PIN_9, hspi5);
+	NRF24_begin(GPIOD, GPIO_PIN_6, GPIO_PIN_7, hspi5);
 	nrf24_DebugUART_Init(huart3);
 
 	printRadioSettings();
@@ -215,18 +244,36 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 	while (1) {
     /* USER CODE END WHILE */
-		if (NRF24_available()) {
-			Rotate_Center();
-			NRF24_read(myRxData, 32);
-			//Descomponer datos
-			processCharacters(myRxData);
-			myRxData[32] = '\r';
-			myRxData[32 + 1] = '\n';
-			HAL_UART_Transmit(&huart3, (uint8_t*) myRxData, 32 + 2, 10);
-		}
+
     /* USER CODE BEGIN 3 */
+//		if (NRF24_available()) {
+//			NRF24_read(myRxData, 32);
+//			myRxData[32] = '\r';
+//			myRxData[32 + 1] = '\n';
+//			HAL_UART_Transmit(&huart3, (uint8_t*) myRxData, 32 + 2, 10);
+//		}
+
+//		rotate(45);
+//		HAL_Delay(500);
+//		rotate(-45);
+//		HAL_Delay(500);
+//		rotate(0);
+//		HAL_Delay(500);
+//		rotate(25);
+//		HAL_Delay(500);
+//		rotate(-25);
+//		HAL_Delay(500);
+
+
+		Forward();
+		HAL_Delay(2000);
+		Backward();
+		HAL_Delay(2000);
+
+
 
 	}
+
   /* USER CODE END 3 */
 }
 
@@ -407,6 +454,7 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 0 */
 
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
 
@@ -418,7 +466,16 @@ static void MX_TIM3_Init(void)
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim3.Init.Period = 63999;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
@@ -509,21 +566,11 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin, GPIO_PIN_RESET);
-
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : LD1_Pin */
-  GPIO_InitStruct.Pin = LD1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LD1_GPIO_Port, &GPIO_InitStruct);
 
 }
 
