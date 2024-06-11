@@ -35,6 +35,11 @@
 #ifndef HSEM_ID_0
 #define HSEM_ID_0 (0U) /* HW semaphore 0*/
 #endif
+
+#define Nrf_CE_Pin GPIO_PIN_6
+#define Nrf_CE_GPIO_Port GPIOC
+#define Nrf_CSn_Pin GPIO_PIN_7
+#define Nrf_CSn_GPIO_Port GPIOC
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -71,7 +76,6 @@ static void MX_TIM3_Init(void);
 uint64_t RxpipeAddrs = 0x11223344AA;
 char myRxData[50];
 
-
 //Control de giro servomotor ------------------------------------------------
 
 void Rotate_Left() {
@@ -95,42 +99,33 @@ void rotate(uint32_t angle) {
 
 //Control de potencia de traccion-----------------------------------------------------
 
-void Forward() {
+void Forward(double power) { //POWER 50-100
 	double val = 0.5f;
 	uint32_t arg = 0;
+	double speed = power * 0.025 / 100;
+//	double speed = power * 0.05 / 100;
 	HAL_Delay(2000);
 	while (val * 100 < 101) { //Target : 0.1
 		val = val + 0.01f;
-//		arg =  (63999 * 0.070) + (63999 * 0.03 * val);
-		arg = (63999 * 0.05) + (63999 * 0.05 * val);
+		arg = (63999 * 0.075) + (63999 * speed * val);
+//		arg = (63999 * 0.05) + (63999 * speed * val);
 		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, arg);
 		HAL_Delay(100);
 	}
 }
 
-void Backward() {
+void Backward(double power) { //POWER 0-100
 	double val = 0.5f;
 	uint32_t arg = 0;
+	double speed = power * 0.025 / 100;
 	HAL_Delay(2000);
 	while (val * 100 < 101) { //Target : 0.05
 		val = val + 0.01f;
-		arg = (63999 * 0.075) - (63999 * 0.025 * val);
+		arg = (63999 * 0.075) - (63999 * speed * val);
 		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, arg);
 		HAL_Delay(100);
 	}
 }
-void backward() {
-	double val = 0.5f;
-	uint32_t arg = 0;
-	HAL_Delay(2000);
-	while (val * 100 < 101) { //Target : 0.05
-		val = val + 0.01f;
-		arg = (63999 * 0.075) - (63999 * 0.025 * val);
-		__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, arg);
-		HAL_Delay(100);
-	}
-}
-
 
 //----------------------------------------------------------------------------------------
 
@@ -150,10 +145,13 @@ void processCharacters(char *data) {
 			Rotate_Center();
 			break;
 		case 'f':
-			Forward(100);
+			Forward(70);
 			break;
 		case 'b':
-			Backward(100);
+			Backward(20);
+			break;
+		case '1':
+			HAL_Delay(1000);
 			break;
 		default:
 			// Opcional: Manejar caracteres no esperados o simplemente no hacer nada
@@ -228,16 +226,17 @@ int main(void)
 	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
 	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_4);
 	//NO ACK
-	NRF24_begin(GPIOD, GPIO_PIN_6, GPIO_PIN_7, hspi5);
+	NRF24_begin(GPIOC, Nrf_CSn_Pin, Nrf_CE_Pin, hspi5);
 	nrf24_DebugUART_Init(huart3);
-
-	printRadioSettings();
-
 	NRF24_setAutoAck(false);
 	NRF24_setChannel(52);
 	NRF24_setPayloadSize(32);
-	NRF24_openReadingPipe(1, RxpipeAddrs);
+	NRF24_setDataRate(RF24_2MBPS);
+	NRF24_openReadingPipe(0, RxpipeAddrs);
+	NRF24_enableDynamicPayloads();
+	printRadioSettings();
 	NRF24_startListening();
+	printf("Empezando conexion\r\n");
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -246,12 +245,12 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-//		if (NRF24_available()) {
-//			NRF24_read(myRxData, 32);
-//			myRxData[32] = '\r';
-//			myRxData[32 + 1] = '\n';
-//			HAL_UART_Transmit(&huart3, (uint8_t*) myRxData, 32 + 2, 10);
-//		}
+		if (NRF24_available()) {
+			NRF24_read(myRxData, 32);
+			myRxData[32] = '\r';
+			myRxData[32 + 1] = '\n';
+			HAL_UART_Transmit(&huart3, (uint8_t*) myRxData, 32 + 2, 10);
+		}
 
 //		rotate(45);
 //		HAL_Delay(500);
@@ -259,18 +258,16 @@ int main(void)
 //		HAL_Delay(500);
 //		rotate(0);
 //		HAL_Delay(500);
-//		rotate(25);
+//		rotate(25);.
+
 //		HAL_Delay(500);
 //		rotate(-25);
 //		HAL_Delay(500);
 
-
-		Forward();
-		HAL_Delay(2000);
-		Backward();
-		HAL_Delay(2000);
-
-
+//		Forward();
+//		HAL_Delay(2000);
+//		Backward();
+//		HAL_Delay(2000);
 
 	}
 
@@ -292,7 +289,7 @@ void SystemClock_Config(void)
 
   /** Configure the main internal regulator output voltage
   */
-  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE0);
+  __HAL_PWR_VOLTAGESCALING_CONFIG(PWR_REGULATOR_VOLTAGE_SCALE2);
 
   while(!__HAL_PWR_GET_FLAG(PWR_FLAG_VOSRDY)) {}
 
@@ -304,7 +301,7 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
   RCC_OscInitStruct.PLL.PLLM = 2;
-  RCC_OscInitStruct.PLL.PLLN = 240;
+  RCC_OscInitStruct.PLL.PLLN = 120;
   RCC_OscInitStruct.PLL.PLLP = 2;
   RCC_OscInitStruct.PLL.PLLQ = 2;
   RCC_OscInitStruct.PLL.PLLR = 2;
@@ -329,7 +326,7 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_APB2_DIV2;
   RCC_ClkInitStruct.APB4CLKDivider = RCC_APB4_DIV2;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_4) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -354,11 +351,11 @@ static void MX_SPI5_Init(void)
   hspi5.Instance = SPI5;
   hspi5.Init.Mode = SPI_MODE_MASTER;
   hspi5.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi5.Init.DataSize = SPI_DATASIZE_4BIT;
+  hspi5.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi5.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi5.Init.CLKPhase = SPI_PHASE_1EDGE;
   hspi5.Init.NSS = SPI_NSS_SOFT;
-  hspi5.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
+  hspi5.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
   hspi5.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi5.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi5.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -566,11 +563,21 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, Nrf_CE_Pin|Nrf_CSn_Pin, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : Nrf_CE_Pin Nrf_CSn_Pin */
+  GPIO_InitStruct.Pin = Nrf_CE_Pin|Nrf_CSn_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
 }
 

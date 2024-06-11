@@ -65,6 +65,10 @@ void Error_Handler(void);
 #define STLINK_RX_GPIO_Port GPIOD
 #define STLINK_TX_Pin GPIO_PIN_9
 #define STLINK_TX_GPIO_Port GPIOD
+#define Nrf_CE_Pin GPIO_PIN_6
+#define Nrf_CE_GPIO_Port GPIOC
+#define Nrf_CSn_Pin GPIO_PIN_7
+#define Nrf_CSn_GPIO_Port GPIOC
 /* USER CODE BEGIN Private defines */
 
 /* USER CODE END Private defines */
